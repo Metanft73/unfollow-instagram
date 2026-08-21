@@ -1,0 +1,20 @@
+{
+  "name": "آنفالو یاب اینستاگرام",
+  "short_name": "آنفالو یاب",
+  "description": "بفهم کی دیگه دنبالت نیست",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "background_color": "#0f0f12",
+  "theme_color": "#E1306C",
+  "orientation": "portrait",
+  "lang": "fa",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
