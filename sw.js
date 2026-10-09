@@ -1,4 +1,4 @@
-const CACHE = 'unfollower-v1';
+const CACHE = 'unfollower-v2';
 const ASSETS = ['/', '/index.html', '/manifest.json'];
 
 self.addEventListener('install', e => {

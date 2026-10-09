@@ -328,8 +328,8 @@
 
   .stats-row {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 10px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
   }
 
   .stat-card {
@@ -477,6 +477,22 @@
 
   .open-btn:active { background: rgba(225,48,108,0.25); transform: scale(0.96); }
 
+  .mark-btn {
+    background: rgba(255,255,255,0.05);
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+    -webkit-appearance: none;
+  }
+
+  .mark-btn:active { background: rgba(255,59,48,0.18); transform: scale(0.94); }
+
   .empty-state {
     text-align: center;
     padding: 40px 20px;
@@ -613,18 +629,25 @@
         <span class="stat-num" id="statUnfollowed">0</span>
         <span class="stat-label">دنبالت نیستن</span>
       </div>
+      <div class="stat-card">
+        <span class="stat-num" id="statDeactivated">0</span>
+        <span class="stat-label">اکانت غیرفعال</span>
+      </div>
     </div>
 
     <div class="tab-bar">
-      <div class="tab active" onclick="switchTab('notfollowing')">دنبالت نیستن</div>
-      <div class="tab" onclick="switchTab('fans')">فن‌های تو</div>
+      <div class="tab active" data-tab="notfollowing" onclick="switchTab('notfollowing')">دنبالت نیستن</div>
+      <div class="tab" data-tab="fans" onclick="switchTab('fans')">فن‌های تو</div>
+      <div class="tab" data-tab="deactivated" onclick="switchTab('deactivated')">🚫 غیرفعال‌ها</div>
     </div>
 
     <div class="tab-content active" id="tab-notfollowing">
       <div class="section-header">
         <div class="section-title">😤 دنبالت نیستن <span class="badge" id="badge-notfollowing">0</span></div>
       </div>
-      <p style="font-size:12px;color:var(--muted);margin-bottom:10px;margin-top:4px;">تو دنبالشونی ولی اونا دنبالت نیستن</p>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:6px;margin-top:4px;">تو دنبالشونی ولی اونا دنبالت نیستن</p>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:10px;">💡 اگر صفحه‌ی اکانتی باز نمی‌شود (اکانت <strong>غیرفعال</strong> شده)، روی دکمه‌ی 🚫 بزن؛ آن اکانت از لیست و تعداد انفالو حذف می‌شود.</p>
+      <p id="nfDeactivatedNote" style="display:none;font-size:12px;color:var(--accent);margin-bottom:10px;">🚫 <span id="nfDeactivatedCount">0</span> اکانت غیرفعال از این لیست حذف شده — <span onclick="switchTab('deactivated')" style="cursor:pointer;font-weight:700;text-decoration:underline;">مشاهده</span></p>
       <div class="search-box">
         <span class="search-icon">🔎</span>
         <input type="text" placeholder="جستجو..." oninput="filterList(this.value, 'notfollowing')">
@@ -642,6 +665,18 @@
         <input type="text" placeholder="جستجو..." oninput="filterList(this.value, 'fans')">
       </div>
       <div class="user-list" id="list-fans"></div>
+    </div>
+
+    <div class="tab-content" id="tab-deactivated">
+      <div class="section-header">
+        <div class="section-title">🚫 اکانت‌های غیرفعال <span class="badge" id="badge-deactivated">0</span></div>
+      </div>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:10px;margin-top:4px;">این اکانت‌ها <strong>غیرفعال</strong> شده‌اند و <strong>در تعداد انفالو حساب نمی‌شوند</strong>. برای برگرداندن به لیست انفالو، روی «↩️ لغو» بزن.</p>
+      <div class="search-box">
+        <span class="search-icon">🔎</span>
+        <input type="text" placeholder="جستجو..." oninput="filterList(this.value, 'deactivated')">
+      </div>
+      <div class="user-list" id="list-deactivated"></div>
     </div>
   </div>
 </div>
@@ -694,7 +729,39 @@
 
   // App logic
   let data = { followers: null, following: null };
-  let lists = { notfollowing: [], fans: [] };
+  let lists = { notfollowing: [], fans: [], deactivated: [] };
+  let followersSet = null;
+  const queries = { notfollowing: '', fans: '', deactivated: '' };
+
+  // Deactivated accounts: marked by the user, excluded from the unfollow list & count.
+  // (Instagram's export lists deactivated accounts under "following" but never under
+  // "followers", and it gives no flag for them — so the user marks them once and the
+  // marking is remembered here for future analyses.)
+  const DEACTIVATED_KEY = 'ig-unfollow-deactivated';
+  const deactivated = loadDeactivated();
+
+  function loadDeactivated() {
+    try {
+      const arr = JSON.parse(localStorage.getItem(DEACTIVATED_KEY) || '[]');
+      return new Set(Array.isArray(arr) ? arr.map(u => String(u).toLowerCase()) : []);
+    } catch { return new Set(); }
+  }
+
+  function saveDeactivated() {
+    try { localStorage.setItem(DEACTIVATED_KEY, JSON.stringify([...deactivated])); } catch {}
+  }
+
+  function markDeactivated(username) {
+    deactivated.add(String(username).toLowerCase());
+    saveDeactivated();
+    refreshResults();
+  }
+
+  function unmarkDeactivated(username) {
+    deactivated.delete(String(username).toLowerCase());
+    saveDeactivated();
+    refreshResults();
+  }
 
   function showError(msg) {
     const el = document.getElementById('errorToast');
@@ -784,20 +851,12 @@
   }
 
   function analyze() {
-    const followersSet = new Set(data.followers.map(u => u.username.toLowerCase()));
+    followersSet = new Set(data.followers.map(u => u.username.toLowerCase()));
     const followingSet = new Set(data.following.map(u => u.username.toLowerCase()));
 
-    lists.notfollowing = data.following.filter(u => !followersSet.has(u.username.toLowerCase()));
     lists.fans = data.followers.filter(u => !followingSet.has(u.username.toLowerCase()));
 
-    document.getElementById('statFollowers').textContent = data.followers.length;
-    document.getElementById('statFollowing').textContent = data.following.length;
-    document.getElementById('statUnfollowed').textContent = lists.notfollowing.length;
-    document.getElementById('badge-notfollowing').textContent = lists.notfollowing.length;
-    document.getElementById('badge-fans').textContent = lists.fans.length;
-
-    renderList('notfollowing', lists.notfollowing);
-    renderList('fans', lists.fans);
+    refreshResults();
 
     document.getElementById('results').classList.add('visible');
     setTimeout(() => {
@@ -805,37 +864,82 @@
     }, 100);
   }
 
+  // Recomputes the unfollow list — deactivated accounts are NOT counted as unfollows —
+  // and updates all stats, badges and lists.
+  function refreshResults() {
+    lists.notfollowing = [];
+    lists.deactivated = [];
+    data.following.forEach(u => {
+      if (followersSet && followersSet.has(u.username.toLowerCase())) return;
+      if (deactivated.has(u.username.toLowerCase())) lists.deactivated.push(u);
+      else lists.notfollowing.push(u);
+    });
+
+    document.getElementById('statFollowers').textContent = data.followers.length;
+    document.getElementById('statFollowing').textContent = data.following.length;
+    document.getElementById('statUnfollowed').textContent = lists.notfollowing.length;
+    document.getElementById('statDeactivated').textContent = lists.deactivated.length;
+    document.getElementById('badge-notfollowing').textContent = lists.notfollowing.length;
+    document.getElementById('badge-fans').textContent = lists.fans.length;
+    document.getElementById('badge-deactivated').textContent = lists.deactivated.length;
+
+    const note = document.getElementById('nfDeactivatedNote');
+    if (note) {
+      note.style.display = lists.deactivated.length > 0 ? 'block' : 'none';
+      document.getElementById('nfDeactivatedCount').textContent = lists.deactivated.length;
+    }
+
+    renderList('notfollowing', filterByQuery('notfollowing'));
+    renderList('fans', filterByQuery('fans'));
+    renderList('deactivated', filterByQuery('deactivated'));
+  }
+
+  function filterByQuery(type) {
+    const q = (queries[type] || '').trim().toLowerCase();
+    return q ? lists[type].filter(u => u.username.toLowerCase().includes(q)) : lists[type];
+  }
+
   function renderList(type, users) {
     const container = document.getElementById('list-' + type);
     if (users.length === 0) {
-      container.innerHTML = `<div class="empty-state"><span class="empty-icon">🎉</span>هیچکس اینجا نیست!</div>`;
+      const icon = type === 'deactivated' ? '🚫' : '🎉';
+      const msg = type === 'deactivated' ? 'هنوز هیچ اکانتی به‌عنوان «غیرفعال» علامت نخورده' : 'هیچکس اینجا نیست!';
+      container.innerHTML = `<div class="empty-state"><span class="empty-icon">${icon}</span>${msg}</div>`;
       return;
     }
     container.innerHTML = users.map(u => {
       const initial = u.username.charAt(0).toUpperCase();
       const profileUrl = u.href || `https://www.instagram.com/${u.username}/`;
+      if (type === 'deactivated') {
+        return `<div class="user-item">
+          <div class="avatar">${initial}</div>
+          <div class="user-info">
+            <span class="username">@${u.username}</span>
+            <span class="user-sub">اکانت غیرفعال — از تعداد انفالو حذف شد</span>
+          </div>
+          <button class="open-btn" onclick="unmarkDeactivated('${u.username}')">↩️ لغو</button>
+        </div>`;
+      }
       return `<div class="user-item">
         <div class="avatar">${initial}</div>
         <div class="user-info">
           <span class="username">@${u.username}</span>
           <span class="user-sub">Instagram</span>
         </div>
+        <button class="mark-btn" title="این اکانت غیرفعال شده؟ از لیست انفالو حذف کن" onclick="markDeactivated('${u.username}')">🚫</button>
         <button class="open-btn" onclick="window.open('${profileUrl}','_blank')">باز کن</button>
       </div>`;
     }).join('');
   }
 
   function filterList(query, type) {
-    const filtered = query.trim()
-      ? lists[type].filter(u => u.username.toLowerCase().includes(query.toLowerCase()))
-      : lists[type];
-    renderList(type, filtered);
+    queries[type] = query;
+    renderList(type, filterByQuery(type));
   }
 
   function switchTab(name) {
-    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    event.target.classList.add('active');
     document.getElementById('tab-' + name).classList.add('active');
   }
 </script>
