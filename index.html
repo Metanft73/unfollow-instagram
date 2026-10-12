@@ -516,6 +516,76 @@
   .tab-content { display: none; }
   .tab-content.active { display: block; }
 
+  .filter-options {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+
+  .checkbox-container {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    color: var(--muted);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .checkbox-container input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--accent);
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+    border: 1.5px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+    position: relative;
+    margin: 0;
+  }
+
+  .checkbox-container input[type="checkbox"]:checked {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-color: var(--accent);
+  }
+
+  .checkbox-container input[type="checkbox"]:checked::after {
+    content: '✓';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 10px;
+    font-weight: bold;
+  }
+
+  .inactive-btn {
+    background: rgba(255,59,48,0.12);
+    color: #ff6b6b;
+    border: none;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    -webkit-appearance: none;
+  }
+
+  .inactive-btn:active { background: rgba(255,59,48,0.25); transform: scale(0.96); }
+
+  .inactive-btn.active {
+    background: rgba(52,199,89,0.12);
+    color: #4cd964;
+    cursor: default;
+  }
+
   .error-toast {
     background: rgba(255,59,48,0.12);
     border: 1px solid rgba(255,59,48,0.3);
@@ -570,6 +640,15 @@
       <li><span class="step-num">۴</span><span>از ایمیل دریافتی، فایل‌های <strong>followers.json</strong> و <strong>following.json</strong> رو آپلود کن</span></li>
     </ul>
   </div>
+  
+  <div class="guide">
+    <div class="guide-title">🔍 فیلتر اکانت‌های غیرفعال</div>
+    <ul class="guide-steps">
+      <li><span class="step-num">۱</span><span>بعد از تحلیل، روی دکمه <strong>✕</strong> کنار هر کاربر کلیک کن تا غیرفعال بشه</span></li>
+      <li><span class="step-num">۲</span><span>چک‌باکس <strong>«اکانت‌های غیرفعال رو نشون نده»</strong> رو فعال کن</span></li>
+      <li><span class="step-num">۳</span><span>اکانت‌های غیرفعال دیگه تو لیست‌ها نشون داده نمیشن</span></li>
+    </ul>
+  </div>
 
   <div class="upload-section">
     <div class="upload-card" id="followersCard">
@@ -616,8 +695,15 @@
     </div>
 
     <div class="tab-bar">
-      <div class="tab active" onclick="switchTab('notfollowing')">دنبالت نیستن</div>
-      <div class="tab" onclick="switchTab('fans')">فن‌های تو</div>
+      <div class="tab active" onclick="switchTab('notfollowing', event)">دنبالت نیستن</div>
+      <div class="tab" onclick="switchTab('fans', event)">فن‌های تو</div>
+    </div>
+
+    <div class="filter-options">
+      <label class="checkbox-container">
+        <input type="checkbox" id="hideInactiveCheckbox" onchange="toggleHideInactive()">
+        <span>اکانت‌های غیرفعال رو نشون نده</span>
+      </label>
     </div>
 
     <div class="tab-content active" id="tab-notfollowing">
@@ -695,12 +781,46 @@
   // App logic
   let data = { followers: null, following: null };
   let lists = { notfollowing: [], fans: [] };
+  let inactiveAccounts = new Set();
+  let hideInactive = false;
 
   function showError(msg) {
     const el = document.getElementById('errorToast');
     el.textContent = msg;
     el.classList.add('visible');
     setTimeout(() => el.classList.remove('visible'), 5000);
+  }
+
+  function toggleHideInactive() {
+    hideInactive = document.getElementById('hideInactiveCheckbox').checked;
+    // Re-render both lists with the new filter
+    filterList(document.querySelector('#tab-notfollowing .search-box input')?.value || '', 'notfollowing');
+    filterList(document.querySelector('#tab-fans .search-box input')?.value || '', 'fans');
+  }
+
+  function toggleInactiveStatus(username, type) {
+    if (inactiveAccounts.has(username)) {
+      inactiveAccounts.delete(username);
+    } else {
+      inactiveAccounts.add(username);
+    }
+    // Save to localStorage
+    localStorage.setItem('inactiveAccounts', JSON.stringify(Array.from(inactiveAccounts)));
+    // Re-render the current tab
+    const activeTab = document.querySelector('.tab.active');
+    if (activeTab) {
+      const tabName = activeTab.id.replace('tab-', '');
+      const searchValue = document.querySelector(`#tab-${tabName} .search-box input`)?.value || '';
+      filterList(searchValue, tabName);
+    } else {
+      // If no active tab, re-render both lists
+      filterList('', 'notfollowing');
+      filterList('', 'fans');
+    }
+  }
+
+  function isActive(username) {
+    return !inactiveAccounts.has(username);
   }
 
   function extractUsernames(parsed) {
@@ -796,6 +916,12 @@
     document.getElementById('badge-notfollowing').textContent = lists.notfollowing.length;
     document.getElementById('badge-fans').textContent = lists.fans.length;
 
+    // Load inactive accounts from localStorage
+    const savedInactive = localStorage.getItem('inactiveAccounts');
+    if (savedInactive) {
+      inactiveAccounts = new Set(JSON.parse(savedInactive));
+    }
+
     renderList('notfollowing', lists.notfollowing);
     renderList('fans', lists.fans);
 
@@ -807,35 +933,57 @@
 
   function renderList(type, users) {
     const container = document.getElementById('list-' + type);
-    if (users.length === 0) {
+    
+    // Filter out inactive accounts if hideInactive is enabled
+    const filteredUsers = hideInactive 
+      ? users.filter(u => isActive(u.username))
+      : users;
+    
+    if (filteredUsers.length === 0) {
       container.innerHTML = `<div class="empty-state"><span class="empty-icon">🎉</span>هیچکس اینجا نیست!</div>`;
       return;
     }
-    container.innerHTML = users.map(u => {
+    container.innerHTML = filteredUsers.map(u => {
       const initial = u.username.charAt(0).toUpperCase();
       const profileUrl = u.href || `https://www.instagram.com/${u.username}/`;
+      const isInactive = inactiveAccounts.has(u.username);
       return `<div class="user-item">
         <div class="avatar">${initial}</div>
         <div class="user-info">
           <span class="username">@${u.username}</span>
           <span class="user-sub">Instagram</span>
         </div>
-        <button class="open-btn" onclick="window.open('${profileUrl}','_blank')">باز کن</button>
+        <div style="display: flex; gap: 6px;">
+          <button class="open-btn" onclick="window.open('${profileUrl}','_blank')">باز کن</button>
+          <button class="inactive-btn ${isInactive ? 'active' : ''}" 
+                  onclick="toggleInactiveStatus('${u.username}', '${type}')" 
+                  title="${isInactive ? 'حذف از غیرفعال‌ها' : 'غیرفعال کردن'}">
+            ${isInactive ? '✓' : '✕'}
+          </button>
+        </div>
       </div>`;
     }).join('');
   }
 
   function filterList(query, type) {
-    const filtered = query.trim()
+    let filtered = query.trim()
       ? lists[type].filter(u => u.username.toLowerCase().includes(query.toLowerCase()))
       : lists[type];
+    
+    // Apply inactive filter if enabled
+    if (hideInactive) {
+      filtered = filtered.filter(u => isActive(u.username));
+    }
+    
     renderList(type, filtered);
   }
 
-  function switchTab(name) {
+  function switchTab(name, event) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
-    event.target.classList.add('active');
+    if (event && event.target) {
+      event.target.classList.add('active');
+    }
     document.getElementById('tab-' + name).classList.add('active');
   }
 </script>
